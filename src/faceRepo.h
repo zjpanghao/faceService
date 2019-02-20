@@ -19,16 +19,19 @@ struct PersonFace {
   std::shared_ptr<ImageFace> image;
 };
 
-int initRepoFaces(mongoc_client_pool_t *pool, const std::string &name);
-//void savePersonFaces(const std::list<PersonFace> &faces); 
-//void savePersonFaces(const std::list<PersonFace> &faces, const std::string &fname); 
-void repoLoadPersonFaces(std::list<PersonFace> &faces); 
-//void loadPersonFaces(const std::string &name, std::list<PersonFace> &faces); 
-void flushFaces();
-int repoDelUserFace(const PersonFace &face);
-int repoAddUserFace(const PersonFace &face);
-int repoDelUser(const PersonFace &face);
-void localLoadPersonFaces(const std::string &name, std::list<PersonFace> &faces);
+class FaceRepo {
+ public:
+  FaceRepo(mongoc_client_pool_t *pool, const std::string &dbName);
+  void repoLoadPersonFaces(std::list<PersonFace> &faces);
+  int repoAddUserFace(const PersonFace &face);
+  int repoDelUserFace(const PersonFace &face);
+  int repoDelUser(const PersonFace &face);
+  
+ private:
+  mongoc_client_pool_t *pool_{NULL};
+  const std::string DBNAME_;
+};
+
 }
 
 #endif

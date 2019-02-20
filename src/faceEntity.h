@@ -6,5 +6,10 @@ struct ImageFace {
   std::string faceToken;
   std::vector<float> feature;
 };
+
+struct FaceBuffer {
+  std::vector<float> feature;
+};
+
 }
 #endif
