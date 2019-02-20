@@ -61,18 +61,18 @@ int FaceService::detect(const std::vector<unsigned char> &data,
   }
   
   int rc = 0;
-  struct timeval tv[2];  
+  struct timeval detectStamp[2];  
   cv::Mat m = cv::imdecode(data, CV_LOAD_IMAGE_COLOR);
-  cv::Mat show = m.clone();
+  // cv::Mat show = m.clone();
   std::vector<FaceLocation> locations;
   ApiWrapper<FaceApi> faceApiWrapper(faceApiBuffer_);
   auto faceApi = faceApiWrapper.getApi();
   if (faceApi == nullptr) {
     return -1;
   }
-  gettimeofday(&tv[0], NULL);
+  gettimeofday(&detectStamp[0], NULL);
   faceApi->getLocations(m, locations, smallFace);
-  gettimeofday(&tv[1], NULL);
+  gettimeofday(&detectStamp[1], NULL);
   //std::unique_ptr<std::vector<TrackFaceInfo>> out(new std::vector<TrackFaceInfo>());
   //std::vector<TrackFaceInfo> *vec = out.get();
   //int nFace = api->track(vec, m, faceNum);
@@ -96,7 +96,7 @@ int FaceService::detect(const std::vector<unsigned char> &data,
     result.location.width= rect.width;
     result.location.height= rect.height;
     result.location.rotation = 0;
-    cv::rectangle(show, rect, cv::Scalar(0,0, 255));
+    //cv::rectangle(show, rect, cv::Scalar(0,0, 255));
     
     /*getfeature and save*/
     Mat child(m, rect); 
@@ -104,12 +104,17 @@ int FaceService::detect(const std::vector<unsigned char> &data,
     std::vector<unsigned char> childImage;
     //Mat cut = child.clone();
     //cut.data, cut.rows * cut.cols * cut.channels()
-    LOG(INFO) << "tv0:" << tv[0].tv_sec << "  " << tv[0].tv_usec;
-    LOG(INFO) << "tv1:" << tv[1].tv_sec << "  " << tv[1].tv_usec;
+    LOG(INFO) << "detect0:" << detectStamp[0].tv_sec << "  " << detectStamp[0].tv_usec;
+    LOG(INFO) << "detect1:" << detectStamp[1].tv_sec << "  " << detectStamp[1].tv_usec;
     std::shared_ptr<FaceBuffer> buffer(new FaceBuffer());
+    struct timeval featureStamp[2];
+    gettimeofday(&featureStamp[0], NULL);
     if (faceApi->getFeature(child, buffer->feature) != 0 || buffer->feature.size() != FEATURE_VEC_LEN) {
       continue;
     }
+    gettimeofday(&featureStamp[1], NULL);
+    LOG(INFO) << "feature0:" << featureStamp[0].tv_sec << "  " << featureStamp[0].tv_usec;
+    LOG(INFO) << "feature1:" << featureStamp[1].tv_sec << "  " << featureStamp[1].tv_usec;
     //buffer->feature.assign(feature, feature + 128);
     #if 0
     result.attr = getAttr(&childImage[0], childImage.size(), api);
@@ -130,7 +135,7 @@ int FaceService::detect(const std::vector<unsigned char> &data,
   } 
 
   if (detectResult.size() > 0) {
-    imwrite("latest.jpg", show);
+    //imwrite("latest.jpg", show);
   }
   return rc;
 }
