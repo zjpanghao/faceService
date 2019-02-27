@@ -71,9 +71,12 @@ class FaceAgent {
   int delPersonFace(const PersonFace &face);
   int delPerson(const PersonFace &face);
   void getUserFaces(const std::string &appName,
-                          const std::string &groupName,
-                          const std::string &userName,
+                          const std::string &groupId,
+                          const std::string &userId,
                           std::map<std::string, std::shared_ptr<ImageFace>> &faceMap);
+  std::shared_ptr<UserFace> getUserFace(const std::string &appName,
+                                        const std::string &groupId,
+                                        const std::string &userId);
 
   private:
    FaceAgent() {

@@ -221,21 +221,32 @@ int FaceService::searchByImage64(const std::set<std::string> &groupIds,
                                  const std::string &imageBase64, 
                                  int num,
                                  std::vector<FaceSearchResult> &searchResult) {
-   ApiWrapper<FaceApi> faceApiWrapper(faceApiBuffer_);
-   auto faceApi = faceApiWrapper.getApi();
-   if (faceApi == nullptr) {
-     return -1;
-   }
    int len = 0;
    std::string data = ImageBase64::decode(imageBase64.c_str(), imageBase64.length(), len);
    std::vector<unsigned char> vdata(&data[0], &data[0] + len);
-   cv::Mat m = cv::imdecode(vdata, CV_LOAD_IMAGE_COLOR);
-   std::vector<float> feature;
-   faceApi->getFeature(m, feature);
-   if (feature.size() != FaceFeature::FEATURE_VEC_LEN) {
-     return -2;
+   std::vector<FaceDetectResult> results;
+   if (0 != detect(vdata, 1, results)) {
+     return -1;
    }
-   return search(faceApi, groupIds, feature, num, searchResult);
+   if (results.size() != 1) {
+    return -2;
+  }
+  
+  FaceDetectResult &result = results[0];
+  std::shared_ptr<FaceBuffer> featureBuffer = featureRepo_->getFaceBuffer(result.faceToken);
+  if (featureBuffer == nullptr) {
+    return -3;
+  }
+  for (int i = 0; i < 10; i++) {
+    std::cout << featureBuffer->feature[i] << "  ";
+  }
+  std::cout << std::endl;
+  ApiWrapper<FaceApi> faceApiWrapper(faceApiBuffer_);
+  auto faceApi = faceApiWrapper.getApi();
+  if (faceApi == nullptr) {
+    return -1;
+  }
+  return search(faceApi, groupIds, featureBuffer->feature, num, searchResult);
 }
             
 int FaceService::search(std::shared_ptr<FaceApi> api,
@@ -284,6 +295,10 @@ int FaceService::search(std::shared_ptr<FaceApi> api,
       tmp.groupId = groupUser[0];
       tmp.userId = groupUser[1];
       tmp.score = p.second;
+      auto user = faceAgent.getUserFace(DEFAULT_APP_NAME, tmp.groupId, tmp.userId);
+      if (user != nullptr) {
+        tmp.userName = user->getUserName();
+      }
       result.push_back(tmp);
     }
   }

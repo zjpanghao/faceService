@@ -7,13 +7,10 @@
 #include <iterator>
 #include <thread>
 #include "opencv2/opencv.hpp"
-#include "baidu_face_api.h"
 #include "image_base64.h"
 #include "cv_help.h"
 #include "json/json.h"
-#include "liveness.h"
 #include "compare.h"
-#include "setting.h"
 #include <chrono>
 #include "image_buf.h"
 #include "glog/logging.h"
@@ -55,7 +52,7 @@ void add_image(const char *fname, std::string uid) {
   //std::vector<unsigned char> data(&out_buf[0], &out_buf[0] + buf_len);
   FaceService &service = FaceService::getFaceService();
   std::string faceToken = "aaa";
-  int rc = service.addUserFace("227", uid, "panghao", base64, faceToken);
+  int rc = service.addUserFace("227", uid, fname, base64, faceToken);
   LOG(INFO) << "add userFace " << fname << " rc:" << rc;
 }
 
@@ -110,7 +107,6 @@ void add_dir(std::string root) {
   std::string name;
   std::string dname;
   std::list<std::string> names;
-  std::list<std::string> files;
   names.push_back(root);
   while (!names.empty()) {
     std::string current = names.front();
@@ -186,6 +182,10 @@ void test_delUser(std::string gid, std::string uid) {
 void ev_server_start(int);
 void ev_server_start_multhread(int, int);
 int main(int argc, char *argv[]) {
+  if (argc != 2) {
+    std::cout << "add <path>" << std::endl;
+    return -2;
+  }
   kunyan::Config config("config.ini");
   std::string portConfig = config.get("server", "port");
   std::stringstream ss;
@@ -193,7 +193,6 @@ int main(int argc, char *argv[]) {
   int port;
   ss >> port;
   std::string name(argv[0]);
-  daemon(1, 0);
   initGlog(name);
   FaceService &service = FaceService::getFaceService();
   ss.clear();
@@ -241,26 +240,18 @@ int main(int argc, char *argv[]) {
     return -1;
   }
   
-  if (0 !=service.init(pool, dbName, false)) {
+  if (0 !=service.init(pool, dbName, true, 1)) {
     return -1;
   }
+  
   //test_delUser("227", "227");
   //test_quality("33.jpg");
   //ev_server_start_multhread(10556, 1); 
   //ev_server_start(10556);
   //test_attr("33.jpg");
-  
-  std::list<PersonFace> faces;
-  //localLoadPersonFaces("faces.db", faces);
-  for (PersonFace &face : faces) {
-     if (0 != kface::repoAddUserFace(face)) {
-      LOG(ERROR) << "repo add userface error" << face.userName;
-      return -9;
-    }
-  }
   //test_delUser("227", "1");
-  //add_image("33.jpg", "1");
-  add_image("panghao.jpg", "3121");
+  add_dir(argv[1]);
+  // add_image("panghao.jpg", "3121");
   //add_image("panghao.jpg", "1");
   //test_search("33.jpg");
   //test_search("3030.jpg");

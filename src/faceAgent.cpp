@@ -110,16 +110,16 @@ FaceAgent& FaceAgent::getFaceAgent() {
 }
 
 void FaceAgent::getUserFaces(const std::string &appName,
-    const std::string &groupName,
-    const std::string &userName,
+    const std::string &groupId,
+    const std::string &userId,
     std::map<std::string, std::shared_ptr<ImageFace>> &faceMap) {
   auto app = getAppFace(appName);
   if (app == nullptr) {
     return;
   }
-  auto group = app->getGroupFace(groupName);
+  auto group = app->getGroupFace(groupId);
   if (group != nullptr) {
-    auto user = group->getUserFace(userName);
+    auto user = group->getUserFace(userId);
     if (user != nullptr) {
       faceMap = user->getImageFaces();
     }
@@ -213,6 +213,20 @@ void FaceAgent::getDefaultPersonFaces(std::list<PersonFace> &faces) {
       }
     }
   }
+}
+
+std::shared_ptr<UserFace> FaceAgent::getUserFace(const std::string &appName,
+    const std::string &groupId,
+    const std::string &userId) {
+  auto app = getAppFace(appName);
+  if (app == nullptr) {
+    return nullptr;
+  }
+  auto group = app->getGroupFace(groupId);
+  if (group != nullptr) {
+    return group->getUserFace(userId);
+  }
+  return nullptr;
 }
 
 }
