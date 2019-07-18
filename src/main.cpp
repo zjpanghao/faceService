@@ -23,13 +23,13 @@
 #include "faceAgent.h"
 #include "faceRepo.h"
 #include "faceService.h"
-#include "config/config.h"
+#include "faceConfig.h"
 #include <mongoc/mongoc.h>
 
 
 using kface::FaceService;
 
-extern void ev_server_start_multhread(int port, int nThread);
+extern void ev_server_start_multhread();
 
 static void initGlog(const std::string &name) {
   DIR *dir = opendir("log");
@@ -49,10 +49,13 @@ int main(int argc, char *argv[]) {
   std::string name(argv[0]);
   daemon(1, 0);
   initGlog(name);
-  kunyan::Config config("config.ini");
-  std::string portConfig = config.get("server", "port");
-  std::string faceLib = config.get("server", "facelib");
-  std::string threadConfig = config.get("server", "thread");
+  //
+  //kunyan::Config config("config.ini");
+  #if 0
+  auto config = kface::FaceConfig::getFaceConfig().getConfig();
+  std::string portConfig = config->get("server", "port");
+  std::string faceLib = config->get("server", "facelib");
+  std::string threadConfig = config->get("server", "thread");
   std::stringstream ss;
   ss << portConfig;
   int port;
@@ -113,12 +116,13 @@ int main(int argc, char *argv[]) {
     LOG(ERROR) << "create mongo poll error";
     return -1;
   }
+#endif
   FaceService &service = FaceService::getFaceService();
-  if (0 !=service.init(pool, dbName, faceLib == "true", threadNum)) {
+  if (0 !=service.init()) {
     return -1;
   }
-  
-  ev_server_start_multhread(port, threadNum); 
+ 
+  ev_server_start_multhread(); 
   while (1) {
     ::sleep(10000);
   }

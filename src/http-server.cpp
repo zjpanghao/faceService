@@ -81,6 +81,7 @@
 #include "httpUtil.h"
 #include "userControl.h"
 #include "faceControl.h"
+#include "faceConfig.h"
 
 
 #define MAX_IMG_SIZE 1024*1024*50
@@ -99,7 +100,20 @@ void httpThread(void *param) {
   event_base_dispatch(base);
 }
 
-void ev_server_start_multhread(int port, int nThread) {
+void ev_server_start_multhread() {
+  int port;
+  int nThread = 1;
+  auto config = kface::FaceConfig::getFaceConfig().getConfig();
+  std::stringstream ss;
+  ss << config->get("server", "port");
+  ss >> port;
+  ss.clear();
+  ss.str("");
+  ss << config->get("server", "thread");
+  if (ss.str() != "") {
+    ss >> nThread;
+  }
+  
   if (signal(SIGPIPE, SIG_IGN) == SIG_ERR)
 		return;
   evutil_socket_t fd;

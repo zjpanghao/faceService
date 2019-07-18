@@ -13,6 +13,7 @@
 #include "face/faceApi.h"
 #include <condition_variable>
 #include "apipool/apiPool.h"
+#include "track.h"
 
 namespace kface {
 class FeatureRepo;
@@ -58,8 +59,8 @@ struct FaceQuality {
 
 struct FaceDetectResult {
   std::string faceToken;
-  std::shared_ptr<FaceAttr> attr;
-  std::shared_ptr<FaceQuality> quality;
+  std::shared_ptr<FaceAttr> attr{nullptr};
+  std::shared_ptr<FaceQuality> quality{nullptr};
   Location location;
   double score;
   //std::shared_ptr<TrackFaceInfo> trackInfo;
@@ -77,9 +78,14 @@ class FaceService {
   static FaceService& getFaceService();
   FaceService();
   /* init baiduapi(now only support one instance), facelib*/
-  int init(mongoc_client_pool_t *mpool, const std::string &dbName, bool initFaceLib, int threadNum);
+  int init(mongoc_client_pool_t *mpool, const std::string &dbName, bool initFaceLib, int threadNum, bool track = true);
+  int init();
   /* detect face, caculate feature and buffer it with facetoken*/
   int detect(const std::vector<unsigned char> &data, 
+             int faceNum,
+             std::vector<FaceDetectResult> &result,
+             bool smallFace = false);
+  int detect(const cv::Mat &m, 
              int faceNum,
              std::vector<FaceDetectResult> &result,
              bool smallFace = false);
@@ -124,6 +130,8 @@ class FaceService {
   int matchImageToken(const std::string &image64,                   
                       const std::string &faceToken,              
                       float &score);
+  std::string getLatestImage();
+  
 
  private:
   int search(std::shared_ptr<FaceApi> api,
@@ -141,6 +149,9 @@ class FaceService {
  
   /*facelib lock*/
   pthread_rwlock_t faceLock_; 
+  std::shared_ptr<ktrack::Track> track_;
+  std::mutex lock_;
+  volatile bool start_{false};
 };
 }
 

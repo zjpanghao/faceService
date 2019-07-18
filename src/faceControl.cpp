@@ -339,11 +339,21 @@ static void faceMatchCb(struct evhttp_request *req, void *arg) {
   evhttp_send_reply(req, 200, "OK", response);
 }
 
+void trackImageCb(struct evhttp_request *req, void *arg) {
+  FaceService &service = FaceService::getFaceService();
+  evbuffer *response = evbuffer_new();
+  std::string image = service.getLatestImage();
+  evbuffer_add_printf(response, "%s", image.c_str());
+  evhttp_send_reply(req, 200, "OK", response);
+}
+
+
 void initFaceControl(std::vector<HttpControl> &controls) {
   std::vector<HttpControl> controlList = {
     {"/face-api/v3/face/detect", faceDetectCb},
     {"/face-api/v3/face/identify", faceIdentifyCb},
-    {"/face-api/v3/face/match", faceMatchCb}
+    {"/face-api/v3/face/match", faceMatchCb},
+    {"/face-api/v3/face/image", trackImageCb}
   };
   for (HttpControl &control : controlList) {
     controls.push_back(control);

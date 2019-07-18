@@ -2,6 +2,7 @@
 #include <sys/time.h>
 #include <set>
 #include "image_base64.h"
+#include "pbase64/base64.h"
 #include "md5.h"
 #include "faceAgent.h"
 #include "faceRepo.h"
@@ -12,6 +13,7 @@
 #include "util.h"
 #include "faceConst.h"
 #include "featureRepo.h"
+#include "faceConfig.h"
 
 #define MAX_FACE_TRACK 5
 
@@ -40,27 +42,58 @@ int FaceService::initAgent() {
   return 0;
 }
 
-int FaceService::init(mongoc_client_pool_t *mpool, const std::string &dbName, bool initFaceLib, int threadNum) {
+int FaceService::init(mongoc_client_pool_t *mpool, const std::string &dbName, bool initFaceLib, int threadNum, bool track) {
   faceApiBuffer_.init(threadNum);
   featureRepo_.reset(new FeatureRepo(mpool, dbName));
   if (initFaceLib) {
     faceRepo_.reset(new FaceRepo(mpool, dbName));
     initAgent();
   }
+  if (track) {
+	  track_ = std::make_shared<ktrack::Track>();
+	  track_->init();
+  }
   return 0;
 }
 
-int FaceService::detect(const std::vector<unsigned char> &data,
+int FaceService::init() {
+  auto config = FaceConfig::getFaceConfig().getConfig();
+  std::stringstream ss;
+  faceApiBuffer_.init(1);
+  ss << config->get("mongo", "uri");
+  std::string uriString(ss.str());
+  ss.clear();
+  ss.str("");
+  ss << config->get("mongo", "db");
+  std::string dbName(ss.str());
+  //const char *uri_string = "mongodb://test:123456@192.168.1.111:27017/test";
+  bson_error_t error;
+  mongoc_uri_t *uri = mongoc_uri_new_with_error(uriString.c_str(), &error);
+  if (!uri) {
+     LOG(ERROR) << "create mongo poll error" << error.message;
+     return -1;
+  }
+  mongoc_client_pool_t *pool = mongoc_client_pool_new(uri);
+  if (!pool) {
+    LOG(ERROR) << "create mongo poll error";
+    return -1;
+  }
+  featureRepo_.reset(new FeatureRepo(pool, dbName));
+  faceRepo_.reset(new FaceRepo(pool, dbName));
+  initAgent();
+  if (config->get("track", "track") == "true") {
+    LOG(INFO) << "init track";
+    track_ = std::make_shared<ktrack::Track>();
+    track_->init();
+  }
+}
+
+int FaceService::detect(const Mat &m,
     int faceNum,
     std::vector<FaceDetectResult> &detectResult,
     bool smallFace) {
-  if (data.size() < 10) {
-    return -1;
-  }
-  
   int rc = 0;
   struct timeval detectStamp[2];  
-  cv::Mat m = cv::imdecode(data, CV_LOAD_IMAGE_COLOR);
   // cv::Mat show = m.clone();
   std::vector<FaceLocation> locations;
   ApiWrapper<FaceApi> faceApiWrapper(faceApiBuffer_);
@@ -74,7 +107,6 @@ int FaceService::detect(const std::vector<unsigned char> &data,
   if (locations.size() <= 0) {
     return -2;
   }
-  LOG(INFO) << "data size:" << data.size();
   LOG(INFO) << "location size" << locations.size();
   for (FaceLocation &location : locations) {
     FaceDetectResult result;
@@ -126,6 +158,20 @@ int FaceService::detect(const std::vector<unsigned char> &data,
   }
 #endif
   return rc;
+}
+
+int FaceService::detect(const std::vector<unsigned char> &data,
+    int faceNum,
+    std::vector<FaceDetectResult> &detectResult,
+    bool smallFace) {
+  if (data.size() < 10) {
+    return -1;
+  }
+  
+  int rc = 0;
+  struct timeval detectStamp[2];  
+  cv::Mat m = cv::imdecode(data, CV_LOAD_IMAGE_COLOR);
+  return detect(m, faceNum, detectResult, smallFace);
 }
 
 int FaceService::search(const std::set<std::string> &groupIds, 
@@ -459,5 +505,26 @@ int FaceService::delUser(const std::string &groupId,
   LOG(INFO) << "del user  userId" << userId <<  "rc:" << rc;
   return 0;
 }
+
+std::string FaceService::getLatestImage() {
+#if 0
+  if (!start_) {
+    return "";
+  }
+#endif
+
+  cv::Mat m =  track_->getLatestImage();
+  if (m.cols == 0) {
+    return "";
+  }
+  std::vector<unsigned char> data;
+  cv::imencode(".jpg", m, data);
+  std::string value;
+  Base64::getBase64().encode(data, value);
+  std::string image = "data:image/jpeg;base64,";
+  image += value;
+  return image;
+}
+
 
 }

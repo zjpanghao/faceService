@@ -1,0 +1,165 @@
+#include "track.h"
+#include <opencv2/opencv.hpp>
+#include <opencv2/tracking.hpp>
+#include "pbase64/base64.h"
+#include <json/json.h>
+#include <glog/logging.h>
+using  apache::thrift::protocol::TProtocol;
+using  apache::thrift::protocol::TBinaryProtocol;
+using  apache::thrift::transport::TTransport;
+using  apache::thrift::transport::TSocket;
+using  apache::thrift::transport::TTransportException;
+using  apache::thrift::transport::TBufferedTransport;
+namespace ktrack {
+Track::~Track() {
+  if (client_ != nullptr) {
+    client_->getInputProtocol()->getTransport()->close();
+  }
+  stop();
+  LOG(INFO) << "track task exit";
+}
+
+bool Track::initClient() {
+  std::shared_ptr<TTransport> socket(new TSocket("localhost", 9090));
+  std::shared_ptr<TTransport> transport(new TBufferedTransport(socket));
+  std::shared_ptr<TProtocol> protocol(new TBinaryProtocol(transport));
+  client_ = std::make_shared<HelmetClient>(protocol);
+  try {
+    transport->open();
+  } catch (TTransportException &e) {
+    return false;
+  }
+  return true;
+}
+
+int Track::init() {
+  int rc = Init("192.168.1.111:9092", "playreal", "group_face");
+  if (rc == 0) {
+    rc |= StartAll();
+  }
+  if (rc != 0) {
+    return -1;
+  }
+  index_ = 0;
+  right_[0] = cv::imread("right.jpg");
+  error_[0] = cv::imread("error.jpg");
+  right_[1] = cv::imread("right.jpg", 0);
+  error_[1] = cv::imread("error.jpg", 0);
+  if (!initClient()) {
+    LOG(ERROR) << "rpc init failed";
+    return -1;
+  }
+  return 0;
+}
+
+cv::Mat Track::getLatestImage() {
+  std::lock_guard<std::mutex> lck(lock_);
+  return image_;
+}
+
+static bool errorRc(int rc) {
+  return rc == 1 ? false : true;
+}
+
+void Track::ProcessMessage(const char *buf, int len) {
+  std::string recv(buf, len);
+  Json::Value root;
+  Json::Reader reader;
+  bool f = reader.parse(recv, root);
+  if (!f) {
+    return;
+  }
+  std::string image = root["image"].asString();
+  std::vector<unsigned char> data;
+  Base64::getBase64().decode(image, data);
+  cv::Mat m = cv::imdecode(data, cv::ImreadModes::IMREAD_COLOR );
+  std::vector<FaceLocation> faces;
+  faceApi_.getLocations(m, faces, true);
+  if (faces.size() > 0) {
+    for (auto &face : faces) {
+      cv::Rect box = face.rect();
+      if (face.confidence() < 0.4) {
+        continue;
+      }
+#if 1
+      box.x -= box.width / 2;
+      if (box.x < 0) {
+        box.x = 0;
+      }
+      box.y -= box.height / 2;
+      if (box.y < 0) {
+        box.y = 0;
+      }
+      box.height +=  box.height / 2;
+      if (box.y + box.height >= m.rows) {
+        box.height = m.rows - box.y;
+      }
+      
+      box.width  = box.width * 2;
+      if (box.width + box.x >= m.cols) {
+        box.width = m.cols - box.x;
+      }
+#endif
+      cv::Mat faceImage(m, box);
+#if 1
+      std::stringstream file1;
+      file1 << "landmark/" << "landmark_" << index_ << ".jpg";
+      index_ = (index_ + 1) % 1000;
+      cv::imwrite(file1.str(), faceImage);
+#endif
+      std::vector<unsigned char> faceImageData;
+      cv::imencode(".jpg", faceImage, faceImageData);
+      std::string imageBase64;
+      Base64::getBase64().encode(faceImageData, imageBase64);
+      int rc = -1;
+      bool status = true;
+      try {
+        if (errorConnectCount_ >= 1 && time(NULL) > errorTime_ + 3) {
+          status = initClient();
+          errorConnectCount_ = 0;
+          errorTime_ = time(NULL);
+        }
+        if (status) {
+          rc = client_->checkHelmet(imageBase64);
+        }
+        LOG(INFO) << "recv " << rc;
+        errorConnectCount_ = 0;
+      } catch (::apache::thrift::transport::TTransportException &e) {
+        LOG(ERROR) << "transport exception:" << e.what();
+        errorConnectCount_++;
+        errorTime_ = time(NULL);
+        rc = -1;
+      } catch (::apache::thrift::TApplicationException &e) {
+        LOG(ERROR) << "check helemt exception" << e.what();
+        rc = -1;
+      } catch (std::exception &e) {
+        LOG(ERROR) << "check helemt std::exception" << e.what();
+        rc = -1;
+      } 
+      static cv::Scalar  RED(0, 0, 255);
+      static cv::Scalar  GREEN(0, 255, 0);
+      static cv::Scalar BLUE(255, 0, 0);
+      cv::Scalar  &scalar = BLUE;
+
+      if (rc != -1 ) {
+        scalar = (errorRc(rc)) ? RED :GREEN;
+        cv::Mat &alert = (errorRc(rc)) ? error_[0] : right_[0];
+        cv::Mat &alertMask = (errorRc(rc)) ? error_[1] : right_[1];
+        cv::Rect alertBox(box.x, box.y - alert.rows < 0 ? 0 : box.y - alert.rows, 
+            alert.cols,  alert.rows);
+        cv::Mat alertImage(m, alertBox);
+        alert.copyTo(alertImage, alertMask);
+      }
+      cv::rectangle(m, box, scalar, 2, 1);
+      std::stringstream file;
+      file << "cv/" << index_ << ".jpg";
+      index_ = (index_ + 1) % 1000;
+      cv::imwrite(file.str(), m);
+      move_ = box;
+    }
+  }
+  std::lock_guard<std::mutex> lck(lock_);
+  image_ = m;
+}
+
+} //namespace ktrack

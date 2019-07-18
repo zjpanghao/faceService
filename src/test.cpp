@@ -46,14 +46,24 @@ void add_images(std::list<std::string> names) {
 }
 
 void add_image(const char *fname, std::string uid) {
+  std::string fileName(fname);
+  std::regex re("/");
+  std::vector<std::string> nameList(std::sregex_token_iterator(fileName.begin(), fileName.end(), re, -1),
+      std::sregex_token_iterator());
+  if (nameList.size() < 2) {
+    return;
+  }
+
   std::string out_buf;
   int buf_len = ImageBuf::get_buf(fname, out_buf);
   std::string base64 =  ImageBase64::encode((const unsigned char*)&out_buf[0], buf_len);
   //std::vector<unsigned char> data(&out_buf[0], &out_buf[0] + buf_len);
   FaceService &service = FaceService::getFaceService();
-  std::string faceToken = "aaa";
-  int rc = service.addUserFace("227", uid, fname, base64, faceToken);
-  LOG(INFO) << "add userFace " << fname << " rc:" << rc;
+  std::string faceToken;
+  int rc = service.addUserFace("221", uid, nameList[nameList.size() - 2], base64, faceToken);
+  if (rc != 0) {
+    LOG(INFO) << "add userFace " << fname << " rc:" << rc;
+  }
 }
 
 int test_search(std::string name) {
@@ -197,6 +207,7 @@ int main(int argc, char *argv[]) {
   FaceService &service = FaceService::getFaceService();
   ss.clear();
   ss.str("");
+#if 0
   ss << config.get("redis", "port");
   int redisPort;
   ss >> redisPort;
@@ -217,6 +228,7 @@ int main(int argc, char *argv[]) {
   new RedisPool(config.get("redis", "ip"), 
                 redisPort, num, max, "3",
                 config.get("redis", "password")));
+#endif
   // mongo
   ss.clear();
   ss.str("");
@@ -240,7 +252,7 @@ int main(int argc, char *argv[]) {
     return -1;
   }
   
-  if (0 !=service.init(pool, dbName, true, 1)) {
+  if (0 !=service.init(pool, dbName, true, 1, false)) {
     return -1;
   }
   
